@@ -22,7 +22,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# Diccionario de Sedes IETIPAM para mapeo directo sin errores de consulta
+# Diccionario de Sedes IETIPAM para mapeo directo
 MAPA_SEDES = {
     1: "Sede Central",
     2: "Los Vencedores",
@@ -39,7 +39,7 @@ MAPA_SEDES = {
 col_logo, col_titulo = st.columns([1, 6])
 
 with col_logo:
-    rutas_logo = ["img/Logo-IETIPAM-1024x1024.png", "Logo-IETIPAM-1024x1024.png", "logo.png"]
+    rutas_logo = ["img/Logo-IETIPAM-1024x1024.jpg", "Logo-IETIPAM-1024x1024.jpg", "img/Logo-IETIPAM-1024x1024.png", "logo.jpg"]
     logo_encontrado = next((r for r in rutas_logo if os.path.exists(r)), None)
     if logo_encontrado:
         st.image(logo_encontrado, width=100)
@@ -53,30 +53,30 @@ with col_titulo:
 
 st.divider()
 
-# 4. Función para Cargar Datos
 # 4. Función para Cargar Datos Reales desde Supabase
 def cargar_reportes():
+    columnas_estandar = [
+        "id", "es_colegio", "sede_id", "Sede", "rol", "grado_texto", 
+        "nombre_persona", "documento", "telefono", "barrio_direccion", 
+        "tipo_estado", "necesidades", "detalle", "fecha_registro"
+    ]
+    
     if supabase:
         try:
-            # Consulta directa a la tabla de reportes
             res = supabase.table("reportes").select("*").execute()
-            df = pd.DataFrame(res.data)
+            df_data = pd.DataFrame(res.data)
             
-            if not df.empty:
-                df["Sede"] = df["sede_id"].map(MAPA_SEDES).fillna("Otra Sede")
-                return df
-            else:
-                # Si la tabla en Supabase está vacía, devuelve la estructura limpia con 0 filas
-                return pd.DataFrame(columns=[
-                    "id", "es_colegio", "sede_id", "Sede", "rol", "grado_texto", 
-                    "nombre_persona", "documento", "telefono", "barrio_direccion", 
-                    "tipo_estado", "necesidades", "detalle", "fecha_registro"
-                ])
+            if not df_data.empty:
+                df_data["Sede"] = df_data["sede_id"].map(MAPA_SEDES).fillna("Otra Sede")
+                return df_data
         except Exception as e:
-            st.error(f"Error al consultar Supabase: {e}")
+            st.error(f"Error consultando base de datos: {e}")
             
-    # Retorno vacío si no hay cliente de Supabase
-    return pd.DataFrame(columns=["tipo_estado", "nombre_persona", "rol", "Sede", "telefono"])
+    # Devuelve DataFrame vacío con nombres de columnas definidos
+    return pd.DataFrame(columns=columnas_estandar)
+
+# Asignación global explícita de la variable df
+df = cargar_reportes()
 
 # 5. Barra Lateral de Filtros
 with st.sidebar:
@@ -90,23 +90,25 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-# Aplicar filtros
+# 6. Filtrado Dinámico de Datos
 df_filtered = df.copy()
-if sede_sel != "Todas":
-    df_filtered = df_filtered[df_filtered["Sede"] == sede_sel]
 
-if filtro_comunidad == "🏫 Comunidad IETIPAM":
-    df_filtered = df_filtered[df_filtered["es_colegio"] == True]
-elif filtro_comunidad == "🏡 Vecinos / Externos":
-    df_filtered = df_filtered[df_filtered["es_colegio"] == False]
+if not df_filtered.empty:
+    if sede_sel != "Todas":
+        df_filtered = df_filtered[df_filtered["Sede"] == sede_sel]
 
-# 6. Tarjetas Métricas con Alta Legibilidad
+    if filtro_comunidad == "🏫 Comunidad IETIPAM":
+        df_filtered = df_filtered[df_filtered["es_colegio"] == True]
+    elif filtro_comunidad == "🏡 Vecinos / Externos":
+        df_filtered = df_filtered[df_filtered["es_colegio"] == False]
+
+# 7. Tarjetas Métricas
 m1, m2, m3, m4 = st.columns(4)
 
 total_reg = len(df_filtered)
-fam_bien = len(df_filtered[df_filtered["tipo_estado"].str.contains("ESTOY_BIEN", na=False)])
-fam_ayuda = len(df_filtered[df_filtered["tipo_estado"].str.contains("NECESITO_AYUDA", na=False)])
-com_esc = len(df_filtered[df_filtered["es_colegio"] == True])
+fam_bien = len(df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("ESTOY_BIEN", na=False)]) if not df_filtered.empty else 0
+fam_ayuda = len(df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA", na=False)]) if not df_filtered.empty else 0
+com_esc = len(df_filtered[df_filtered["es_colegio"] == True]) if not df_filtered.empty else 0
 
 m1.metric(label="📋 Total Reportes", value=total_reg)
 m2.metric(label="🟢 Familias A Salvo", value=fam_bien)
@@ -115,7 +117,7 @@ m4.metric(label="🏫 Comunidad Escolar", value=com_esc)
 
 st.divider()
 
-# 7. Pestañas Principales
+# 8. Pestañas de Trabajo
 tab1, tab2, tab3 = st.tabs(["📋 Consolidado General", "🏫 Censo por Sede y Grado", "📦 Logística de Apoyos y Víveres"])
 
 with tab1:
@@ -123,7 +125,10 @@ with tab1:
     cols_mostrar = ["tipo_estado", "nombre_persona", "rol", "Sede", "grado_texto", "telefono", "barrio_direccion", "necesidades", "detalle", "fecha_registro"]
     cols_existentes = [c for c in cols_mostrar if c in df_filtered.columns]
     
-    st.dataframe(df_filtered[cols_existentes], use_container_width=True)
+    if not df_filtered.empty:
+        st.dataframe(df_filtered[cols_existentes], use_container_width=True)
+    else:
+        st.info("ℹ️ Aún no hay registros en la base de datos.")
     
     csv = df_filtered.to_csv(index=False).encode('utf-8')
     st.download_button(
@@ -136,30 +141,34 @@ with tab1:
 
 with tab2:
     st.subheader("Caracterización por Sede y Rol")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.write("### Reportes por Sede Educativa")
-        if "Sede" in df_filtered.columns and not df_filtered.empty:
+    if not df_filtered.empty:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.write("### Reportes por Sede Educativa")
             st.bar_chart(df_filtered["Sede"].value_counts())
-    
-    with col_b:
-        st.write("### Reportes por Rol en la Comunidad")
-        if "rol" in df_filtered.columns and not df_filtered.empty:
+        
+        with col_b:
+            st.write("### Reportes por Rol en la Comunidad")
             st.bar_chart(df_filtered["rol"].value_counts())
+    else:
+        st.info("ℹ️ Sin datos suficientes para generar gráficas.")
 
 with tab3:
     st.subheader("Familias que Requieren Entrega de Apoyos o Víveres")
-    df_necesidad = df_filtered[df_filtered["tipo_estado"].str.contains("NECESITO_AYUDA", na=False)]
-    
-    if not df_necesidad.empty:
-        for idx, row in df_necesidad.iterrows():
-            with st.expander(f"🔴 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
-                    st.write(f"**Rol / Grado:** {row.get('rol', 'N/A')} - {row.get('grado_texto', 'N/A')}")
-                with c2:
-                    st.write(f"**Insumos solicitados:** {row.get('necesidades', [])}")
-                    st.write(f"**Mensaje:** {row.get('detalle', 'Sin observaciones')}")
+    if not df_filtered.empty:
+        df_necesidad = df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA", na=False)]
+        
+        if not df_necesidad.empty:
+            for idx, row in df_necesidad.iterrows():
+                with st.expander(f"🔴 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
+                        st.write(f"**Rol / Grado:** {row.get('rol', 'N/A')} - {row.get('grado_texto', 'N/A')}")
+                    with c2:
+                        st.write(f"**Insumos solicitados:** {row.get('necesidades', [])}")
+                        st.write(f"**Mensaje:** {row.get('detalle', 'Sin observaciones')}")
+        else:
+            st.success("🟢 No hay solicitudes de apoyo pendientes bajo el filtro seleccionado.")
     else:
-        st.success("🟢 No hay solicitudes de apoyo pendientes bajo el filtro seleccionado.")
+        st.info("ℹ️ No hay solicitudes de apoyo registradas.")
