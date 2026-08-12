@@ -54,27 +54,29 @@ with col_titulo:
 st.divider()
 
 # 4. Función para Cargar Datos
+# 4. Función para Cargar Datos Reales desde Supabase
 def cargar_reportes():
     if supabase:
         try:
-            # Consulta directa a la tabla reportes sin relaciones fallidas
+            # Consulta directa a la tabla de reportes
             res = supabase.table("reportes").select("*").execute()
             df = pd.DataFrame(res.data)
+            
             if not df.empty:
-                # Mapear el nombre de la sede
                 df["Sede"] = df["sede_id"].map(MAPA_SEDES).fillna("Otra Sede")
                 return df
-        except Exception:
-            pass
+            else:
+                # Si la tabla en Supabase está vacía, devuelve la estructura limpia con 0 filas
+                return pd.DataFrame(columns=[
+                    "id", "es_colegio", "sede_id", "Sede", "rol", "grado_texto", 
+                    "nombre_persona", "documento", "telefono", "barrio_direccion", 
+                    "tipo_estado", "necesidades", "detalle", "fecha_registro"
+                ])
+        except Exception as e:
+            st.error(f"Error al consultar Supabase: {e}")
             
-    # Datos de muestra cuando aún no hay conexión o registros
-    return pd.DataFrame([
-        {"id": 1, "es_colegio": True, "sede_id": 1, "Sede": "Sede Central", "rol": "ESTUDIANTE", "grado_texto": "8-1", "nombre_persona": "Camilo Torres", "documento": "1143829101", "telefono": "3001234567", "barrio_direccion": "Alfonso López", "tipo_estado": "🟢 ESTOY_BIEN", "necesidades": [], "detalle": "Todos a salvo en casa.", "fecha_registro": "2026-08-11 17:30"},
-        {"id": 2, "es_colegio": True, "sede_id": 2, "Sede": "Los Vencedores", "rol": "ACUDIENTE", "grado_texto": "5-2", "nombre_persona": "María Pérez", "documento": "31456789", "telefono": "3158765432", "barrio_direccion": "El Vergel", "tipo_estado": "🔴 NECESITO_AYUDA", "necesidades": ["VIVERES", "AGUA"], "detalle": "Familia de 5 personas sin servicio de agua.", "fecha_registro": "2026-08-11 17:42"},
-        {"id": 3, "es_colegio": True, "sede_id": 3, "Sede": "Atanasio Girardot", "rol": "DOCENTE", "grado_texto": "N/A", "nombre_persona": "Juan Gómez", "documento": "16789456", "telefono": "3109876543", "barrio_direccion": "San Fernando", "tipo_estado": "🔴 NECESITO_AYUDA", "necesidades": ["MEDICINAS"], "detalle": "Adulto mayor requiere medicamento con urgencia.", "fecha_registro": "2026-08-11 18:01"}
-    ])
-
-df = cargar_reportes()
+    # Retorno vacío si no hay cliente de Supabase
+    return pd.DataFrame(columns=["tipo_estado", "nombre_persona", "rol", "Sede", "telefono"])
 
 # 5. Barra Lateral de Filtros
 with st.sidebar:
