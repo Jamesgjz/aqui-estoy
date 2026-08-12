@@ -17,12 +17,13 @@ def init_supabase():
         url = st.secrets["SUPABASE_URL"]
         key = st.secrets["SUPABASE_KEY"]
         return create_client(url, key)
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ Error cargando credenciales de Supabase: {e}")
         return None
 
 supabase = init_supabase()
 
-# Diccionario de Sedes IETIPAM para mapeo directo
+# Diccionario de respaldo de Sedes por ID (según tu INSERT de SQL)
 MAPA_SEDES = {
     1: "Sede Central",
     2: "Los Vencedores",
@@ -32,7 +33,7 @@ MAPA_SEDES = {
     6: "San Luis",
     7: "San Jorge",
     8: "Tres de Julio",
-    9: "Comunidad / Vecinos"
+    9: "Otra / Comunidad Externa"
 }
 
 # 3. Encabezado e Identidad Institucional
@@ -53,7 +54,7 @@ with col_titulo:
 
 st.divider()
 
-# 4. Función para Cargar Datos Reales desde Supabase
+# 4. Función para Cargar Datos
 def cargar_reportes():
     columnas_estandar = [
         "id", "es_colegio", "sede_id", "Sede", "rol", "grado_texto", 
@@ -63,19 +64,19 @@ def cargar_reportes():
     
     if supabase:
         try:
+            # Consulta directa a la tabla reportes sin joins ambiguos
             res = supabase.table("reportes").select("*").execute()
             df_data = pd.DataFrame(res.data)
             
             if not df_data.empty:
-                df_data["Sede"] = df_data["sede_id"].map(MAPA_SEDES).fillna("Otra Sede")
+                # Asignar nombre de sede mapeando sede_id
+                df_data["Sede"] = df_data["sede_id"].map(MAPA_SEDES).fillna("Otra / Comunidad Externa")
                 return df_data
         except Exception as e:
-            st.error(f"Error consultando base de datos: {e}")
+            st.error(f"Error consultando la base de datos: {e}")
             
-    # Devuelve DataFrame vacío con nombres de columnas definidos
     return pd.DataFrame(columns=columnas_estandar)
 
-# Asignación global explícita de la variable df
 df = cargar_reportes()
 
 # 5. Barra Lateral de Filtros
@@ -106,8 +107,8 @@ if not df_filtered.empty:
 m1, m2, m3, m4 = st.columns(4)
 
 total_reg = len(df_filtered)
-fam_bien = len(df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("ESTOY_BIEN", na=False)]) if not df_filtered.empty else 0
-fam_ayuda = len(df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA", na=False)]) if not df_filtered.empty else 0
+fam_bien = len(df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("ESTOY_BIEN|BIEN", na=False)]) if not df_filtered.empty else 0
+fam_ayuda = len(df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA|AYUDA", na=False)]) if not df_filtered.empty else 0
 com_esc = len(df_filtered[df_filtered["es_colegio"] == True]) if not df_filtered.empty else 0
 
 m1.metric(label="📋 Total Reportes", value=total_reg)
@@ -156,7 +157,7 @@ with tab2:
 with tab3:
     st.subheader("Familias que Requieren Entrega de Apoyos o Víveres")
     if not df_filtered.empty:
-        df_necesidad = df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA", na=False)]
+        df_necesidad = df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA|AYUDA", na=False)]
         
         if not df_necesidad.empty:
             for idx, row in df_necesidad.iterrows():
