@@ -119,7 +119,13 @@ m4.metric(label="🏫 Comunidad Escolar", value=com_esc)
 st.divider()
 
 # 8. Pestañas de Trabajo
-tab1, tab2, tab3 = st.tabs(["📋 Consolidado General", "🏫 Censo por Sede y Grado", "📦 Logística de Apoyos y Víveres"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📋 Consolidado General", 
+    "🏫 Censo por Sede y Grado", 
+    "📦 Logística de Apoyos y Víveres",
+    "🟡 Ubicación de Familiares",
+    "🛖 Afectación de Viviendas"
+])
 
 with tab1:
     st.subheader("Listado Consolidado de Reportes Recibidos")
@@ -173,3 +179,41 @@ with tab3:
             st.success("🟢 No hay solicitudes de apoyo pendientes bajo el filtro seleccionado.")
     else:
         st.info("ℹ️ No hay solicitudes de apoyo registradas.")
+
+with tab4:
+    st.subheader("🟡 Ubicación y Búsqueda de Familiares")
+    if not df_filtered.empty:
+        df_busco = df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("BUSCO_A_ALGUIEN|BUSCO", na=False)]
+        
+        if not df_busco.empty:
+            for idx, row in df_busco.iterrows():
+                with st.expander(f"🟡 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
+                        st.write(f"**Rol / Grado:** {row.get('rol', 'N/A')} - {row.get('grado_texto', 'N/A')}")
+                    with c2:
+                        st.warning(f"**Mensaje / Detalle de la Búsqueda:** {row.get('detalle', 'Sin observaciones')}")
+        else:
+            st.success("🟢 No hay registros activos de búsqueda de familiares.")
+    else:
+        st.info("ℹ️ No hay reportes de búsqueda de personas registrados.")
+
+with tab5:
+    st.subheader("R Reportes de Afectación de Viviendas")
+    if not df_filtered.empty:
+        df_dano = df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("REPORTAR_DANO|DANO|DAÑO", na=False)]
+        
+        if not df_dano.empty:
+            for idx, row in df_dano.iterrows():
+                with st.expander(f"🛖 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
+                        st.write(f"**Rol / Grado:** {row.get('rol', 'N/A')} - {row.get('grado_texto', 'N/A')}")
+                    with c2:
+                        st.error(f"**Detalle del Daño Reportado:** {row.get('detalle', 'Sin observaciones')}")
+        else:
+            st.success("🟢 No hay reportes de daños en viviendas bajo el filtro seleccionado.")
+    else:
+        st.info("ℹ️ No hay reportes de afectación registrados.")
