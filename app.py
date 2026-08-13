@@ -136,7 +136,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏫 Censo por Sede y Grado", 
     "📦 Logística de Apoyos y Víveres",
     "🟡 Ubicación de Familiares",
-    "🛖 Afectación de Viviendas",
+    "m Afectación de Viviendas",
     "✅ Gestión y Seguimiento Unificado"
 ])
 
@@ -144,14 +144,28 @@ with tab1:
     st.subheader("Listado Consolidado de Reportes Recibidos")
     
     if not df_filtered.empty:
-        # Añadir columna visual de estado verde/rojo para el consolidado
+        # Campo de búsqueda por Nombre o Documento
+        busqueda_texto = st.text_input("🔎 Buscar por Nombre Completo o Documento de Identidad:", placeholder="Escribe el nombre o documento aquí...")
+        
         df_display = df_filtered.copy()
+        
+        # Aplicar filtro de texto si el usuario escribe algo
+        if busqueda_texto.strip():
+            query = busqueda_texto.strip().lower()
+            cond_nombre = df_display["nombre_persona"].astype(str).str.lower().str.contains(query, na=False)
+            cond_doc = df_display["documento"].astype(str).str.lower().str.contains(query, na=False)
+            df_display = df_display[cond_nombre | cond_doc]
+
+        # Añadir columna visual de estado verde/rojo para el consolidado
         df_display["Estado Atendido"] = df_display["atendido"].apply(lambda x: "🟢 ATENDIDO / CONTACTADO" if x else "🔴 PENDIENTE POR ATENDER")
         
-        cols_mostrar = ["Estado Atendido", "tipo_estado", "nombre_persona", "rol", "Sede", "grado_texto", "telefono", "barrio_direccion", "necesidades", "detalle", "fecha_registro"]
+        cols_mostrar = ["Estado Atendido", "tipo_estado", "nombre_persona", "documento", "rol", "Sede", "grado_texto", "telefono", "barrio_direccion", "necesidades", "detalle", "fecha_registro"]
         cols_existentes = [c for c in cols_mostrar if c in df_display.columns]
         
-        st.dataframe(df_display[cols_existentes], use_container_width=True)
+        if not df_display.empty:
+            st.dataframe(df_display[cols_existentes], use_container_width=True)
+        else:
+            st.warning(f"🔍 No se encontraron registros que coincidan con '{busqueda_texto}'.")
     else:
         st.info("ℹ️ Aún no hay registros en la base de datos.")
     
