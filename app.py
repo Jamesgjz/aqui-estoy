@@ -54,28 +54,40 @@ with col_titulo:
 
 st.divider()
 
-# 4. Función para Cargar Datos
+# 4. Función para Cargar Datos (Soportando la columna 'atendido')
 def cargar_reportes():
     columnas_estandar = [
         "id", "es_colegio", "sede_id", "Sede", "rol", "grado_texto", 
         "nombre_persona", "documento", "telefono", "barrio_direccion", 
-        "tipo_estado", "necesidades", "detalle", "fecha_registro"
+        "tipo_estado", "necesidades", "detalle", "fecha_registro", "atendido"
     ]
     
     if supabase:
         try:
-            # Consulta directa a la tabla reportes sin joins ambiguos
             res = supabase.table("reportes").select("*").execute()
             df_data = pd.DataFrame(res.data)
             
             if not df_data.empty:
-                # Asignar nombre de sede mapeando sede_id
                 df_data["Sede"] = df_data["sede_id"].map(MAPA_SEDES).fillna("Otra / Comunidad Externa")
+                if "atendido" not in df_data.columns:
+                    df_data["atendido"] = False
+                else:
+                    df_data["atendido"] = df_data["atendido"].fillna(False).astype(bool)
                 return df_data
         except Exception as e:
             st.error(f"Error consultando la base de datos: {e}")
             
     return pd.DataFrame(columns=columnas_estandar)
+
+# Función aux para actualizar el estado en Supabase
+def cambiar_estado_atendido(id_registro, estado_actual):
+    if supabase and id_registro:
+        try:
+            supabase.table("reportes").update({"atendido": not estado_actual}).eq("id", id_registro).execute()
+            st.cache_data.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error actualizando estado: {e}")
 
 df = cargar_reportes()
 
@@ -118,22 +130,28 @@ m4.metric(label="🏫 Comunidad Escolar", value=com_esc)
 
 st.divider()
 
-# 8. Pestañas de Trabajo
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# 8. Pestañas de Trabajo (Agregada pestaña de Gestión Unificada con Check)
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📋 Consolidado General", 
     "🏫 Censo por Sede y Grado", 
     "📦 Logística de Apoyos y Víveres",
     "🟡 Ubicación de Familiares",
-    "🛖 Afectación de Viviendas"
+    "🛖 Afectación de Viviendas",
+    "✅ Gestión y Seguimiento Unificado"
 ])
 
 with tab1:
     st.subheader("Listado Consolidado de Reportes Recibidos")
-    cols_mostrar = ["tipo_estado", "nombre_persona", "rol", "Sede", "grado_texto", "telefono", "barrio_direccion", "necesidades", "detalle", "fecha_registro"]
-    cols_existentes = [c for c in cols_mostrar if c in df_filtered.columns]
     
     if not df_filtered.empty:
-        st.dataframe(df_filtered[cols_existentes], use_container_width=True)
+        # Añadir columna visual de estado verde/rojo para el consolidado
+        df_display = df_filtered.copy()
+        df_display["Estado Atendido"] = df_display["atendido"].apply(lambda x: "🟢 ATENDIDO / CONTACTADO" if x else "🔴 PENDIENTE POR ATENDER")
+        
+        cols_mostrar = ["Estado Atendido", "tipo_estado", "nombre_persona", "rol", "Sede", "grado_texto", "telefono", "barrio_direccion", "necesidades", "detalle", "fecha_registro"]
+        cols_existentes = [c for c in cols_mostrar if c in df_display.columns]
+        
+        st.dataframe(df_display[cols_existentes], use_container_width=True)
     else:
         st.info("ℹ️ Aún no hay registros en la base de datos.")
     
@@ -167,7 +185,8 @@ with tab3:
         
         if not df_necesidad.empty:
             for idx, row in df_necesidad.iterrows():
-                with st.expander(f"🔴 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
+                st_icon = "🟢" if row.get("atendido", False) else "🔴"
+                with st.expander(f"{st_icon} {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
                     c1, c2 = st.columns(2)
                     with c1:
                         st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
@@ -187,7 +206,8 @@ with tab4:
         
         if not df_busco.empty:
             for idx, row in df_busco.iterrows():
-                with st.expander(f"🟡 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
+                st_icon = "🟢" if row.get("atendido", False) else "🟡"
+                with st.expander(f"{st_icon} {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
                     c1, c2 = st.columns(2)
                     with c1:
                         st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
@@ -200,13 +220,14 @@ with tab4:
         st.info("ℹ️ No hay reportes de búsqueda de personas registrados.")
 
 with tab5:
-    st.subheader("R Reportes de Afectación de Viviendas")
+    st.subheader("🛖 Reportes de Afectación de Viviendas")
     if not df_filtered.empty:
         df_dano = df_filtered[df_filtered["tipo_estado"].astype(str).str.contains("REPORTAR_DANO|DANO|DAÑO", na=False)]
         
         if not df_dano.empty:
             for idx, row in df_dano.iterrows():
-                with st.expander(f"🛖 {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
+                st_icon = "🟢" if row.get("atendido", False) else "🔴"
+                with st.expander(f"{st_icon} {row.get('nombre_persona', 'N/A')} — {row.get('barrio_direccion', 'N/A')} (Sede: {row.get('Sede', 'N/A')})"):
                     c1, c2 = st.columns(2)
                     with c1:
                         st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
@@ -217,3 +238,44 @@ with tab5:
             st.success("🟢 No hay reportes de daños en viviendas bajo el filtro seleccionado.")
     else:
         st.info("ℹ️ No hay reportes de afectación registrados.")
+
+# 9. PESTAÑA UNIFICADA DE ATENCIÓN Y SEGUIMIENTO CON CHECKS
+with tab6:
+    st.subheader("📋 Listado Unificado para Gestión de Casos Críticos")
+    st.caption("Afectaciones prioritarias: Logística de Apoyos, Ubicación de Personas y Daños en Vivienda.")
+    
+    if not df_filtered.empty:
+        # Filtrar unificado los 3 casos prioritarios
+        filtro_casos = df_filtered["tipo_estado"].astype(str).str.contains("NECESITO_AYUDA|AYUDA|BUSCO_A_ALGUIEN|BUSCO|REPORTAR_DANO|DANO|DAÑO", na=False)
+        df_gestion = df_filtered[filtro_casos]
+        
+        if not df_gestion.empty:
+            for idx, row in df_gestion.iterrows():
+                reg_id = row.get("id")
+                atendido_val = bool(row.get("atendido", False))
+                color_icono = "🟢 [ATENDIDO]" if atendido_val else "🔴 [PENDIENTE]"
+                
+                col_check, col_info = st.columns([1, 5])
+                
+                with col_check:
+                    st.write("")
+                    st.write("")
+                    val_check = st.checkbox("¿Atendido?", value=atendido_val, key=f"chk_{reg_id}")
+                    if val_check != atendido_val:
+                        cambiar_estado_atendido(reg_id, atendido_val)
+                
+                with col_info:
+                    with st.expander(f"{color_icono} {row.get('nombre_persona', 'N/A')} | {row.get('tipo_estado', 'N/A')} — {row.get('barrio_direccion', 'N/A')}"):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.write(f"**Sede:** {row.get('Sede', 'N/A')}")
+                            st.write(f"**Teléfono:** {row.get('telefono', 'N/A')}")
+                            st.write(f"**Rol/Grado:** {row.get('rol', 'N/A')} - {row.get('grado_texto', 'N/A')}")
+                        with c2:
+                            st.write(f"**Insumos:** {row.get('necesidades', [])}")
+                            st.write(f"**Detalle / Mensaje:** {row.get('detalle', 'Sin detalle')}")
+                st.divider()
+        else:
+            st.success("🟢 No existen casos críticos pendientes por atender bajo este filtro.")
+    else:
+        st.info("ℹ️ No hay datos para procesar.")
