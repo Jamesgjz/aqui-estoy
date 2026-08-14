@@ -64,7 +64,8 @@ def cargar_reportes():
     
     if supabase:
         try:
-            res = supabase.table("reportes").select("*").execute()
+            # Modifica la línea de consulta:
+            res = supabase.table("reportes").select("*").limit(50000).execute()
             df_data = pd.DataFrame(res.data)
             
             if not df_data.empty:
