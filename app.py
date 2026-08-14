@@ -54,7 +54,7 @@ with col_titulo:
 
 st.divider()
 
-# 4. Función para Cargar Datos (Soportando la columna 'atendido')
+# 4. Función para Cargar Datos (Paginación automática por rangos para superar el tope de 1.000 filas)
 def cargar_reportes():
     columnas_estandar = [
         "id", "es_colegio", "sede_id", "Sede", "rol", "grado_texto", 
@@ -64,9 +64,26 @@ def cargar_reportes():
     
     if supabase:
         try:
-            # Modifica la línea de consulta:
-            res = supabase.table("reportes").select("*").limit(50000).execute()
-            df_data = pd.DataFrame(res.data)
+            todos_los_datos = []
+            tamano_bloque = 1000
+            inicio = 0
+            
+            while True:
+                fin = inicio + tamano_bloque - 1
+                res = supabase.table("reportes").select("*").range(inicio, fin).execute()
+                
+                if not res.data:
+                    break
+                
+                todos_los_datos.extend(res.data)
+                
+                # Si el bloque devuelto es menor que el tamaño solicitado, ya se descargó el último registro
+                if len(res.data) < tamano_bloque:
+                    break
+                
+                inicio += tamano_bloque
+            
+            df_data = pd.DataFrame(todos_los_datos)
             
             if not df_data.empty:
                 df_data["Sede"] = df_data["sede_id"].map(MAPA_SEDES).fillna("Otra / Comunidad Externa")
@@ -137,7 +154,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏫 Censo por Sede y Grado", 
     "📦 Logística de Apoyos y Víveres",
     "🟡 Ubicación de Familiares",
-    "m Afectación de Viviendas",
+    "🛖 Afectación de Viviendas",
     "✅ Gestión y Seguimiento Unificado"
 ])
 
